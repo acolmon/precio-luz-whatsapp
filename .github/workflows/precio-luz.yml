@@ -34,4 +34,4 @@ jobs:
           WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
           WHATSAPP_RECIPIENT: ${{ secrets.WHATSAPP_RECIPIENT }}
           FORZAR: ${{ (github.event_name == 'workflow_dispatch' && inputs.forzar) && '1' || '' }}
-        run: python src/main.py
+        run: python main.py
