@@ -1,20 +1,73 @@
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/api.py", line 71, in request
-    return session.request(method=method, url=url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/sessions.py", line 635, in request
-    prep = self.prepare_request(req)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/sessions.py", line 541, in prepare_request
-    p.prepare(
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/models.py", line 440, in prepare
-    self.prepare_headers(headers)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/models.py", line 570, in prepare_headers
-    check_header_validity(header)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/utils.py", line 1095, in check_header_validity
-07/09/2026 · media 0,2212 €/kWh · 00h 🔴 0,2071 · 01h 🔴 0,2072 · 02h 🔴 0,2003 · 03h 🔴 0,2022 · 04h 🟡 0,1986 · 05h 🔴 0,2016 · 06h 🔴 0,2271 · 07h 🔴 0,2806 · 08h 🔴 0,2906 · 09h 🔴 0,2152 · 10h 🔴 0,2394 · 11h 🟡 0,1839 · 12h 🟡 0,1718 · 13h 🟡 0,1526 · 14h 🟢 0,0854 min · 15h 🟢 0,0957 · 16h 🟢 0,1034 · 17h 🟡 0,1541 · 18h 🔴 0,2802 · 19h 🔴 0,3323 · 20h 🔴 0,3703 · 21h 🔴 0,3804 max · 22h 🔴 0,2705 · 23h 🔴 0,2580 · mas baratas: 14h,15h,16h
-    _validate_header_part(header, value, 1)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/requests/utils.py", line 1116, in _validate_header_part
-    raise InvalidHeader(
-requests.exceptions.InvalidHeader: Invalid leading whitespace, reserved character(s), or return character(s) in header value: '***'
-Error: Process completed with exit code 1.
+"""Envio por la API oficial de Meta (WhatsApp Cloud API).
+
+Los mensajes programados (fuera de una conversacion abierta) exigen una PLANTILLA
+aprobada por Meta. Aqui se envia la plantilla `precio_luz_diario` con un unico
+parametro de texto {{1}} en el cuerpo (la linea que genera mensaje.py).
+
+Variables de entorno:
+  WHATSAPP_TOKEN             token permanente del usuario de sistema de Meta
+  WHATSAPP_PHONE_NUMBER_ID   ID del numero emisor (panel WhatsApp > API Setup)
+  WHATSAPP_RECIPIENT         numero destino en formato internacional sin '+', p. ej. 34600222847
+Opcionales:
+  WHATSAPP_TEMPLATE          nombre de la plantilla (por defecto: precio_luz_diario)
+  WHATSAPP_TEMPLATE_LANG     idioma de la plantilla (por defecto: es)
+"""
+from __future__ import annotations
+
+import os
+
+import requests
+
+API_VERSION = "v21.0"
+
+
+def enviar_plantilla(variable_texto: str) -> None:
+    # .strip() por si el secret se pego con espacios o un salto de linea al final
+    token = (os.environ.get("WHATSAPP_TOKEN") or "").strip()
+    phone_id = (os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or "").strip()
+    destino = (os.environ.get("WHATSAPP_RECIPIENT") or "").strip()
+    faltan = [
+        nombre
+        for nombre, valor in (
+            ("WHATSAPP_TOKEN", token),
+            ("WHATSAPP_PHONE_NUMBER_ID", phone_id),
+            ("WHATSAPP_RECIPIENT", destino),
+        )
+        if not valor
+    ]
+    if faltan:
+        raise RuntimeError(f"Faltan variables de entorno: {', '.join(faltan)}")
+
+    plantilla = os.environ.get("WHATSAPP_TEMPLATE", "precio_luz_diario")
+    idioma = os.environ.get("WHATSAPP_TEMPLATE_LANG", "es")
+
+    url = f"https://graph.facebook.com/{API_VERSION}/{phone_id}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": destino,
+        "type": "template",
+        "template": {
+            "name": plantilla,
+            "language": {"code": idioma},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": variable_texto}],
+                }
+            ],
+        },
+    }
+    resp = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(
+            f"WhatsApp Cloud API fallo: HTTP {resp.status_code} - {resp.text[:600]}"
+        )
+    print(f"[whatsapp] enviado: {resp.text[:300]}")
